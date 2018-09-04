@@ -84,9 +84,9 @@ title: "Concurrency in Kotlin/Native"
 
 ## <a name="detach"></a>Object subgraph detachment
 
-   Object subgraph without external references could be disconnected using `detachObjectGraph` to
-  a `COpaquePointer` value, which could be stored in `void*` data, so disconnected object subgraphs
-  could be stored in C data structure, and later attached back with `attachObjectGraph<T>` in arbitrary thread
+   Object subgraph without external references could be disconnected using `DetachedObjectGraph<T>` and getting 
+  a `COpaquePointer` value from it, which could be stored in `void*` data, so disconnected object subgraphs
+  could be stored in C data structure, and later attached back with `DetachedObjectGraph<T>.attach()` in arbitrary thread
   or worker. Combined with [raw memory sharing](#shared) it allows side channel object transfer between
   concurrent threads, if worker mechanisms are insufficient for the particular task.
 
