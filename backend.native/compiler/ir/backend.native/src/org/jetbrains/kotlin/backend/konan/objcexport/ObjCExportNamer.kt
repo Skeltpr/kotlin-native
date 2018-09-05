@@ -9,9 +9,11 @@ import org.jetbrains.kotlin.backend.konan.descriptors.isArray
 import org.jetbrains.kotlin.backend.konan.descriptors.isInterface
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.descriptors.*
+import org.jetbrains.kotlin.descriptors.konan.isKonanStdlib
 import org.jetbrains.kotlin.incremental.components.NoLookupLocation
-import org.jetbrains.kotlin.name.FqName
+import org.jetbrains.kotlin.load.kotlin.PackagePartClassUtils
 import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
 import org.jetbrains.kotlin.resolve.descriptorUtil.isSubclassOf
 import org.jetbrains.kotlin.resolve.descriptorUtil.module
@@ -22,15 +24,26 @@ internal class ObjCExportNamer(val moduleDescriptor: ModuleDescriptor,
         val mapper: ObjCExportMapper,
         private val topLevelNamePrefix: String = moduleDescriptor.namePrefix
     ) {
-    val kotlinAnyName = "KotlinBase"
 
-    private val commonPackageSegments = moduleDescriptor.guessMainPackage().pathSegments()
+    data class ClassOrProtocolName(val swiftName: String, val objCName: String, val binaryName: String)
 
-    val mutableSetName = "${topLevelNamePrefix}MutableSet"
-    val mutableMapName = "${topLevelNamePrefix}MutableDictionary"
+    private fun String.mangleClassOrProtocolName(): ClassOrProtocolName {
+        val prefixedName = topLevelNamePrefix + this
+        return ClassOrProtocolName(swiftName = this, objCName = prefixedName, binaryName = prefixedName)
+    }
 
-    fun numberBoxName(descriptor: ClassDescriptor): String = "$topLevelNamePrefix${descriptor.name.asString()}"
-    val kotlinNumberName = "${topLevelNamePrefix}Number"
+    private fun String.toUnmangledClassOrProtocolName(): ClassOrProtocolName =
+            ClassOrProtocolName(swiftName = this, objCName = this, binaryName = this)
+
+    val kotlinAnyName = "KotlinBase".toUnmangledClassOrProtocolName()
+
+    val mutableSetName = "KotlinMutableSet".toUnmangledClassOrProtocolName()
+    val mutableMapName = "KotlinMutableDictionary".toUnmangledClassOrProtocolName()
+
+    fun numberBoxName(descriptor: ClassDescriptor): ClassOrProtocolName =
+            "Kotlin${descriptor.name.asString()}".toUnmangledClassOrProtocolName()
+
+    val kotlinNumberName = "KotlinNumber".toUnmangledClassOrProtocolName()
 
     private val methodSelectors = object : Mapping<FunctionDescriptor, String>() {
 
@@ -91,26 +104,23 @@ internal class ObjCExportNamer(val moduleDescriptor: ModuleDescriptor,
                 first.containingDeclaration == second.containingDeclaration
     }
 
-    fun getPackageName(fqName: FqName): String = classNames.getOrPut(fqName) {
-        StringBuilder().apply {
-            append(topLevelNamePrefix)
-            fqName.pathSegments().forEachIndexed { index, segment ->
-                if (index < commonPackageSegments.size) {
-                    assert(commonPackageSegments[index] == segment)
-                } else {
-                    append(segment.asString().capitalize())
-                }
-            }
-        }.mangledSequence { append("_") }
-    }
+    fun getFileClassName(file: KtFile): ClassOrProtocolName = classNames.getOrPut(file) {
+        StringBuilder(PackagePartClassUtils.getFilePartShortName(file.name)).mangledSequence { append("_") }
+    }.mangleClassOrProtocolName()
 
-    fun getClassOrProtocolName(descriptor: ClassDescriptor): String {
+    private val predefinedClassNames = mapOf(
+            builtIns.any to kotlinAnyName,
+            builtIns.mutableSet to mutableSetName,
+            builtIns.mutableMap to mutableMapName
+    )
+
+    fun getClassOrProtocolName(descriptor: ClassDescriptor): ClassOrProtocolName {
+        predefinedClassNames[descriptor]?.let { return it }
+
         val mapping = if (descriptor.isInterface) protocolNames else classNames
 
         return mapping.getOrPut(descriptor) {
             StringBuilder().apply {
-                append(topLevelNamePrefix)
-
                 if (descriptor.module != moduleDescriptor) {
                     append(descriptor.module.namePrefix)
                 }
@@ -119,7 +129,7 @@ internal class ObjCExportNamer(val moduleDescriptor: ModuleDescriptor,
                         .toList().reversed()
                         .joinTo(this, "") { it.name.asString().capitalize() }
             }.mangledSequence { append("_") }
-        }
+        }.mangleClassOrProtocolName()
     }
 
     fun getSelector(method: FunctionDescriptor): String = methodSelectors.getOrPut(method) {
@@ -174,7 +184,7 @@ internal class ObjCExportNamer(val moduleDescriptor: ModuleDescriptor,
         assert(mapper.isBaseMethod(method))
 
         val parameters = mapper.bridgeMethod(method).valueParametersAssociated(method)
-        
+
         StringBuilder().apply {
             append(method.getMangledName(forSwift = true))
             append("(")
@@ -243,9 +253,10 @@ internal class ObjCExportNamer(val moduleDescriptor: ModuleDescriptor,
     init {
         val any = builtIns.any
 
-        classNames.forceAssign(any, kotlinAnyName)
-        classNames.forceAssign(builtIns.mutableSet, mutableSetName)
-        classNames.forceAssign(builtIns.mutableMap, mutableMapName)
+        predefinedClassNames.forEach { descriptor, name ->
+            // Note: it is a hack.
+            classNames.forceAssign(descriptor, name.swiftName)
+        }
 
         fun ClassDescriptor.method(name: String) =
                 this.unsubstitutedMemberScope.getContributedFunctions(
@@ -435,6 +446,8 @@ private fun ObjCExportMapper.canHaveSameName(first: PropertyDescriptor, second: 
 }
 
 internal val ModuleDescriptor.namePrefix: String get() {
+    if (this.isKonanStdlib()) return "Kotlin"
+
     // <fooBar> -> FooBar
     val moduleName = this.name.asString()
         .let { it.substring(1, it.lastIndex) }
