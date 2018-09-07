@@ -66,7 +66,7 @@ struct Backtrace {
   }
 
   void setNextElement(_Unwind_Ptr element) {
-    Kotlin_NativePtrArray_set(obj()->array(), index++, element);
+    Kotlin_NativePtrArray_set(obj(), index++, element);
   }
 
   ObjHeader* obj() { return arrayHolder.obj(); }
