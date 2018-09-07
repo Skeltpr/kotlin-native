@@ -60,17 +60,13 @@ class AutoFree {
 #if USE_GCC_UNWIND
 struct Backtrace {
   Backtrace(int count, int skip) : index(0), skipCount(skip) {
-    auto result = AllocArrayInstance(
-        theArrayTypeInfo, count - skipCount, arrayHolder.slot());
+    auto result = AllocArrayInstance(theNativePtrArrayTypeInfo, count - skipCount, arrayHolder.slot());
     // TODO: throw cached OOME?
     RuntimeCheck(result != nullptr, "Cannot create backtrace array");
   }
 
-  void setNextElement(const char* element) {
-    auto result = CreateStringFromCString(
-      element, ArrayAddressOfElementAt(obj()->array(), index++));
-    // TODO: throw cached OOME?
-    RuntimeCheck(result != nullptr, "Cannot create backtrace array element");
+  void setNextElement(_Unwind_Ptr element) {
+    Kotlin_NativePtrArray_set(obj()->array(), index++, element);
   }
 
   ObjHeader* obj() { return arrayHolder.obj(); }
@@ -100,20 +96,14 @@ _Unwind_Reason_Code unwindCallback(
 #else
   _Unwind_Ptr address = _Unwind_GetIP(context);
 #endif
-
-  char symbol[512];
-  if (!AddressToSymbol((const void*)address, symbol, sizeof(symbol))) {
-    // Make empty string:
-    symbol[0] = '\0';
-  }
-
-  char line[512];
-  konan::snprintf(line, sizeof(line) - 1, "%s (%p)",
-    symbol, (void*)(intptr_t)address);
-  backtrace->setNextElement(line);
+  backtrace->setNextElement(address);
   return _URC_NO_REASON;
 }
 #endif
+
+// Skips first 3 elements as irrelevant.
+constexpr int kSkipFrames = 3;
+constexpr int maxBacktraceSize = 32;
 
 }  // namespace
 
@@ -123,13 +113,9 @@ extern "C" {
 // however it is better to have an inexact stacktrace than not to have any.
 OBJ_GETTER0(GetCurrentStackTrace) {
 #if OMIT_BACKTRACE
-  ObjHeader* result = AllocArrayInstance(theArrayTypeInfo, 1, OBJ_RESULT);
-  ArrayHeader* array = result->array();
-  CreateStringFromCString("<UNIMPLEMENTED>", ArrayAddressOfElementAt(array, 0));
+  ObjHeader* result = AllocArrayInstance(theNativePtrArrayTypeInfo, 0, OBJ_RESULT);
   return result;
 #else
-  // Skips first 3 elements as irrelevant.
-  constexpr int kSkipFrames = 3;
 #if USE_GCC_UNWIND
   int depth = 0;
   _Unwind_Backtrace(depthCountCallback, &depth);
@@ -139,10 +125,9 @@ OBJ_GETTER0(GetCurrentStackTrace) {
   _Unwind_Backtrace(unwindCallback, &result);
   RETURN_OBJ(result.obj());
 #else
-  const int maxSize = 32;
-  void* buffer[maxSize];
+  void* buffer[maxBacktraceSize];
 
-  int size = backtrace(buffer, maxSize);
+  int size = backtrace(buffer, maxBacktraceSize);
   if (size < kSkipFrames)
       return AllocArrayInstance(theNativePtrArrayTypeInfo, 0, OBJ_RESULT);
   ObjHolder resultHolder;
@@ -156,22 +141,43 @@ OBJ_GETTER0(GetCurrentStackTrace) {
 }
 
 OBJ_GETTER(Kotlin_getStackTraceStrings, KConstRef backtrace) {
+#if OMIT_BACKTRACE
+  ObjHeader* result = AllocArrayInstance(theArrayTypeInfo, 1, OBJ_RESULT);
+  ArrayHeader* array = result->array();
+  CreateStringFromCString("<UNIMPLEMENTED>", ArrayAddressOfElementAt(array, 0));
+  return result;
+#else
   uint32_t size = backtrace->array()->count_;
-  constexpr int kSkipFrames = 3;
+  ObjHolder resultHolder;
+  ObjHeader* result = AllocArrayInstance(theArrayTypeInfo, size - kSkipFrames, resultHolder.slot());
+  ArrayHeader* array = result->array();
+#if USE_GCC_UNWIND
+
+  for (int index = 0; index < size; ++index) {
+    void* address = Kotlin_NativePtrArray_get(backtrace, index);
+    char symbol[512];
+    if (!AddressToSymbol((const void*)address, symbol, sizeof(symbol))) {
+      // Make empty string:
+      symbol[0] = '\0';
+    }
+    char line[512];
+    konan::snprintf(line, sizeof(line) - 1, "%s (%p)", symbol, (void*)(intptr_t)address);
+    CreateStringFromCString(line, ArrayAddressOfElementAt(array, index - kSkipFrames));
+  }
+
+
+#else
   char** symbols = backtrace_symbols(NativePtrArrayAddressOfElementAt(backtrace->array(), 0), size);
   RuntimeCheck(symbols != nullptr, "Not enough memory to retrieve the stacktrace");
   if (size < kSkipFrames)
     return AllocArrayInstance(theArrayTypeInfo, 0, OBJ_RESULT);
   AutoFree autoFree(symbols);
-  ObjHolder resultHolder;
-  ObjHeader* result = AllocArrayInstance(
-      theArrayTypeInfo, size - kSkipFrames, resultHolder.slot());
-  ArrayHeader* array = result->array();
   for (int index = kSkipFrames; index < size; ++index) {
-    CreateStringFromCString(
-        symbols[index], ArrayAddressOfElementAt(array, index - kSkipFrames));
+    CreateStringFromCString(symbols[index], ArrayAddressOfElementAt(array, index - kSkipFrames));
   }
   RETURN_OBJ(result);
+#endif // !USE_GCC_UNWIND
+#endif // !OMIT_BACKTRACE
 }
 
 void ThrowException(KRef exception) {
