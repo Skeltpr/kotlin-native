@@ -22,11 +22,14 @@ public open class Throwable(open val message: String?, open val cause: Throwable
 
     constructor() : this(null, null)
 
-    private val stacktrace: Array<String> = getCurrentStackTrace()
+    private val stacktrace: NativePtrArray = getCurrentStackTrace()
 
     fun printStackTrace() {
         println(this.toString())
-        for (element in stacktrace) {
+
+        val strings = getStackTraceStrings(stacktrace)
+
+        for (element in strings) {
             println("        at " + element)
         }
 
@@ -48,4 +51,7 @@ public open class Throwable(open val message: String?, open val cause: Throwable
 }
 
 @SymbolName("Kotlin_getCurrentStackTrace")
-private external fun getCurrentStackTrace(): Array<String>
+private external fun getCurrentStackTrace(): NativePtrArray
+
+@SymbolName("Kotlin_getStackTraceStrings")
+private external fun getStackTraceStrings(stacktrace: NativePtrArray): Array<String>

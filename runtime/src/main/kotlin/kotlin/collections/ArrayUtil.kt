@@ -292,6 +292,10 @@ external private fun copyImpl(array: DoubleArray, fromIndex: Int,
 external private fun copyImpl(array: BooleanArray, fromIndex: Int,
                               destination: BooleanArray, toIndex: Int, count: Int)
 
+@SymbolName("Kotlin_NativePtrArray_copyImpl")
+external private fun copyImpl(array: NativePtrArray, fromIndex: Int,
+                              destination: NativePtrArray, toIndex: Int, count: Int)
+
 /**
  * Copies a range of array elements at a specified [fromIndex] (inclusive) to [toIndex] (exclusive) range of indices
  * to another [destination] array starting at [destinationIndex].

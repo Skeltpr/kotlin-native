@@ -528,4 +528,31 @@ KNativePtr Kotlin_Arrays_getAddressOfElement(KRef thiz, KInt index) {
   return AddressOfElementAt(array, index);
 }
 
+KNativePtr Kotlin_NativePtrArray_get(KConstRef thiz, KInt index) {
+  const ArrayHeader* array = thiz->array();
+  if (static_cast<uint32_t>(index) >= array->count_) {
+    ThrowArrayIndexOutOfBoundsException();
+  }
+  return *PrimitiveArrayAddressOfElementAt<KNativePtr>(array, index);
+}
+
+void Kotlin_NativePtrArray_set(KRef thiz, KInt index, KNativePtr value) {
+  ArrayHeader* array = thiz->array();
+  if (static_cast<uint32_t>(index) >= array->count_) {
+    ThrowArrayIndexOutOfBoundsException();
+  }
+  mutabilityCheck(thiz);
+  *PrimitiveArrayAddressOfElementAt<KNativePtr>(array, index) = value;
+}
+
+KInt Kotlin_NativePtrArray_getArrayLength(KConstRef thiz) {
+  const ArrayHeader* array = thiz->array();
+  return array->count_;
+}
+
+void Kotlin_NativePtrArray_copyImpl(KConstRef thiz, KInt fromIndex,
+                              KRef destination, KInt toIndex, KInt count) {
+  copyImpl<KNativePtr>(thiz, fromIndex, destination, toIndex, count);
+}
+
 }  // extern "C"

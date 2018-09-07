@@ -56,6 +56,14 @@ inline const KInt* IntArrayAddressOfElementAt(const ArrayHeader* obj, KInt index
   return reinterpret_cast<const KInt*>(obj + 1) + index;
 }
 
+inline KNativePtr* NativePtrArrayAddressOfElementAt(ArrayHeader* obj, KInt index) {
+  return reinterpret_cast<KNativePtr*>(obj + 1) + index;
+}
+
+inline const KNativePtr* NativePtrArrayAddressOfElementAt(const ArrayHeader* obj, KInt index) {
+  return reinterpret_cast<const KNativePtr*>(obj + 1) + index;
+}
+
 // Consider aligning of base to sizeof(T).
 template <typename T>
 inline T* PrimitiveArrayAddressOfElementAt(ArrayHeader* obj, KInt index) {
@@ -108,6 +116,11 @@ OBJ_GETTER(Kotlin_IntArray_clone, KConstRef thiz);
 KInt Kotlin_IntArray_get(KConstRef thiz, KInt index);
 void Kotlin_IntArray_set(KRef thiz, KInt index, KInt value);
 KInt Kotlin_IntArray_getArrayLength(KConstRef thiz);
+
+OBJ_GETTER(Kotlin_NativePtrArray_clone, KConstRef thiz);
+KNativePtr Kotlin_NativePtrArray_get(KConstRef thiz, KInt index);
+void Kotlin_NativePtrArray_set(KRef thiz, KInt index, KNativePtr value);
+KInt Kotlin_NativePtrArray_getArrayLength(KConstRef thiz);
 
 // io/Console.kt
 void Kotlin_io_Console_print(KString message);

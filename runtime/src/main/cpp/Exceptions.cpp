@@ -146,7 +146,25 @@ OBJ_GETTER0(GetCurrentStackTrace) {
   char** symbols = backtrace_symbols(buffer, size);
   RuntimeCheck(symbols != nullptr, "Not enough memory to retrieve the stacktrace");
   if (size < kSkipFrames)
-      return AllocArrayInstance(theArrayTypeInfo, 0, OBJ_RESULT);
+      return AllocArrayInstance(theNativePtrArrayTypeInfo, 0, OBJ_RESULT);
+  AutoFree autoFree(symbols);
+  ObjHolder resultHolder;
+  ObjHeader* result = AllocArrayInstance(theNativePtrArrayTypeInfo, size, resultHolder.slot());
+  for (int index = kSkipFrames; index < size; ++index) {
+    Kotlin_NativePtrArray_set(result, index, buffer[index]);
+  }
+  RETURN_OBJ(result);
+#endif
+#endif  // !OMIT_BACKTRACE
+}
+
+OBJ_GETTER(Kotlin_getStackTraceStrings, KConstRef backtrace) {
+  uint32_t size = backtrace->array()->count_;
+  constexpr int kSkipFrames = 3;
+  char** symbols = backtrace_symbols(NativePtrArrayAddressOfElementAt(backtrace->array(), 0), size);
+  RuntimeCheck(symbols != nullptr, "Not enough memory to retrieve the stacktrace");
+  if (size < kSkipFrames)
+    return AllocArrayInstance(theArrayTypeInfo, 0, OBJ_RESULT);
   AutoFree autoFree(symbols);
   ObjHolder resultHolder;
   ObjHeader* result = AllocArrayInstance(
@@ -154,11 +172,9 @@ OBJ_GETTER0(GetCurrentStackTrace) {
   ArrayHeader* array = result->array();
   for (int index = kSkipFrames; index < size; ++index) {
     CreateStringFromCString(
-      symbols[index], ArrayAddressOfElementAt(array, index - kSkipFrames));
+        symbols[index], ArrayAddressOfElementAt(array, index - kSkipFrames));
   }
   RETURN_OBJ(result);
-#endif
-#endif  // !OMIT_BACKTRACE
 }
 
 void ThrowException(KRef exception) {

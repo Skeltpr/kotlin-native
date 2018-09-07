@@ -220,6 +220,36 @@ private class IntIteratorImpl(val collection: IntArray) : IntIterator() {
     }
 }
 
+@ExportTypeInfo("theNativePtrArrayTypeInfo")
+internal final class NativePtrArray {
+    // Constructors are handled with the compiler magic.
+    public constructor(@Suppress("UNUSED_PARAMETER") size: Int) {}
+
+    /**
+     * Creates a new array of the specified [size], where each element is calculated by calling the specified
+     * [init] function. The [init] function returns an array element given its index.
+     */
+    @InlineConstructor
+    public constructor(size: Int, init: (Int) -> Int): this(size) {
+        for (i in 0..size - 1) {
+            this[i] = init(i)
+        }
+    }
+
+    public val size: Int
+        get() = getArrayLength()
+
+    @SymbolName("Kotlin_NativePtrArray_get")
+    external public operator fun get(index: Int): Int
+
+    @SymbolName("Kotlin_NativePtrArray_set")
+    external public operator fun set(index: Int, value: Int): Unit
+
+    @SymbolName("Kotlin_NativePtrArray_getArrayLength")
+    external private fun getArrayLength(): Int
+}
+
+
 /**
  * An array of longs.
  * @constructor Creates a new array of the specified [size], with all elements initialized to zero.
