@@ -143,11 +143,8 @@ OBJ_GETTER0(GetCurrentStackTrace) {
   void* buffer[maxSize];
 
   int size = backtrace(buffer, maxSize);
-  char** symbols = backtrace_symbols(buffer, size);
-  RuntimeCheck(symbols != nullptr, "Not enough memory to retrieve the stacktrace");
   if (size < kSkipFrames)
       return AllocArrayInstance(theNativePtrArrayTypeInfo, 0, OBJ_RESULT);
-  AutoFree autoFree(symbols);
   ObjHolder resultHolder;
   ObjHeader* result = AllocArrayInstance(theNativePtrArrayTypeInfo, size, resultHolder.slot());
   for (int index = kSkipFrames; index < size; ++index) {
